@@ -106,12 +106,12 @@ if __name__ == "__main__":
         # Model nusvc
         accuracy, truePositive, trueNegative, falsePositive, falseNegative = \
             runNuSVC(nplistOfXs, nplistOfYs,nuValue=0.03)
-        printMetrics('transformer', 'nuSVC', accuracy, truePositive, trueNegative, falsePositive, falseNegative)
+        printMetrics(method, 'nuSVC', accuracy, truePositive, trueNegative, falsePositive, falseNegative)
 
         # Model linearSVC
         accuracy, truePositive, trueNegative, falsePositive, falseNegative = \
             runLinearSVC(nplistOfXs, nplistOfYs, random_state=0, tol=1e-5, max_iter=100000)
-        printMetrics('transformer', 'linearSVC', accuracy, truePositive, trueNegative, falsePositive, falseNegative)
+        printMetrics(method, 'linearSVC', accuracy, truePositive, trueNegative, falsePositive, falseNegative)
 
 
 

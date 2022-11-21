@@ -61,7 +61,7 @@ def getLogRatiosOfWords(posProbDict, negProbDict, defaultLogBound=10):
     return wordProbRatios
 
 
-def getLogRatioOfWordsFromDataset(filename, normalizerSequence, sentenceColName='Text', sep='\t'):
+def getCleanedWordsFromDataset(filename, normalizerSequence, sentenceColName='Text', sep='\t'):
     combined, positive, negative = getPositiveNegativeDFs(filename=filename, sep=sep)
     posSentences = positive[sentenceColName].tolist()
     negSentences = negative[sentenceColName].tolist()
@@ -69,7 +69,9 @@ def getLogRatioOfWordsFromDataset(filename, normalizerSequence, sentenceColName=
     # normalizerSequence = [NFD(), StripAccents(), Strip(), Lowercase()]
     posCleanedSentences = cleanSentences(posSentences, normalizerSequence)
     negCleanedSentences = cleanSentences(negSentences, normalizerSequence)
+    return posCleanedSentences,negCleanedSentences
 
+def computeLogRatios(posCleanedSentences, negCleanedSentences):
     wordCountPos, probWordPos, numWordsPos = getWordStats(posCleanedSentences)
     wordCountNeg, probWordNeg, numWordsNeg = getWordStats(negCleanedSentences)
     logRatiosOfWords = getLogRatiosOfWords(probWordPos, probWordNeg, defaultLogBound=5)
@@ -87,9 +89,10 @@ if __name__ == "__main__":
     normalizerSequence = [NFD(), StripAccents(), Strip(), Lowercase()]
     sentenceColName = 'Text'
     sep = '\t'
+    posCleanedSentences, negCleanedSentences = \
+        getCleanedWordsFromDataset(filename, normalizerSequence, sentenceColName=sentenceColName, sep=sep)
+    sortedLogRatiosOfWords, sortedAbsLogRatiosOfWords = computeLogRatios(posCleanedSentences, negCleanedSentences)
 
-    sortedLogRatiosOfWords, sortedAbsLogRatiosOfWords = \
-        getLogRatioOfWordsFromDataset(filename, normalizerSequence, sentenceColName=sentenceColName, sep=sep)
 
     print(sortedLogRatiosOfWords)
 

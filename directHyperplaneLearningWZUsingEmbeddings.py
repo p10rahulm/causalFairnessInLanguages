@@ -1,5 +1,5 @@
 import time, numpy as np, pandas as pd
-from wordSentimentStatsInDataset import getLogRatioOfWordsFromDataset
+from wordSentimentStatsInDataset import getCleanedWordsFromDataset,computeLogRatios
 from tokenizers.normalizers import NFD, StripAccents, Strip, Lowercase, BertNormalizer
 from wordUtils import getTokenTransformerEmbedding
 from sklearn import svm
@@ -86,9 +86,11 @@ if __name__ == "__main__":
     normalizerSequence = [NFD(), StripAccents(), Strip(), Lowercase()]
     sentenceColName = 'Text'
     sep = '\t'
+    posCleanedSentences, negCleanedSentences = \
+        getCleanedWordsFromDataset(filename, normalizerSequence, sentenceColName=sentenceColName, sep=sep)
+    sortedLogRatiosOfWords, sortedAbsLogRatiosOfWords = computeLogRatios(posCleanedSentences, negCleanedSentences)
 
-    sortedLogRatiosOfWords, sortedAbsLogRatiosOfWords = \
-        getLogRatioOfWordsFromDataset(filename, normalizerSequence, sentenceColName=sentenceColName, sep=sep)
+
 
     words = list(sortedLogRatiosOfWords.keys())
     methods = ['spacy','transformer']

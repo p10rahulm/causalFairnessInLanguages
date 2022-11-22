@@ -1,73 +1,50 @@
-import time, numpy as np, pandas as pd
-from wordSentimentStatsInDataset import getCleanedWordsFromDataset,computeLogRatios
+import time, numpy as np, pandas as pd, torch
+from wordSentimentStatsInDataset import getCleanedWordsFromDataset, computeLogRatios
 from tokenizers.normalizers import NFD, StripAccents, Strip, Lowercase, BertNormalizer
-from wordUtils import getTokenTransformerEmbedding
-from sklearn import svm
-from wordUtils import getSpacyVector
+from wordUtils import getSpacyVector, getTokenTransformerEmbedding, getListOfWordsFromSentences
 from transformers import DistilBertTokenizerFast, DistilBertModel
-from sklearn.svm import NuSVC
-from sklearn.svm import LinearSVC
-from sklearn.preprocessing import StandardScaler
-from sklearn.pipeline import make_pipeline
+from tqdm import tqdm
 
-def getClassFromLogRatio(value,threshold=0.5):
-    if abs(value)>threshold:
+
+def getClassFromLogRatio(value, threshold=0.5):
+    if abs(value) > threshold:
         return 1
     else:
         return -1
 
-def getMetrics(accuracyTableSckitLinear):
-    accuracy = (accuracyTableSckitLinear[0,0]+accuracyTableSckitLinear[1,1])/np.sum(accuracyTableSckitLinear)
-    truePositive = (accuracyTableSckitLinear[0, 0]) / (accuracyTableSckitLinear[0, 0] + accuracyTableSckitLinear[0, 1])
-    trueNegative = (accuracyTableSckitLinear[1, 1]) / (accuracyTableSckitLinear[1, 0] + accuracyTableSckitLinear[1, 1])
-    falsePositive = (accuracyTableSckitLinear[0, 1]) / (accuracyTableSckitLinear[0, 0] + accuracyTableSckitLinear[0, 1])
-    falseNegative = (accuracyTableSckitLinear[1, 0]) / (accuracyTableSckitLinear[1, 0] + accuracyTableSckitLinear[1, 1])
-    return accuracy,truePositive,trueNegative,falsePositive,falseNegative
+
+def getMetrics(confusionMatrix):
+    accuracy = (confusionMatrix[0, 0] + confusionMatrix[1, 1]) / np.sum(confusionMatrix)
+    truePositive = (confusionMatrix[0, 0]) / (confusionMatrix[0, 0] + confusionMatrix[0, 1])
+    trueNegative = (confusionMatrix[1, 1]) / (confusionMatrix[1, 0] + confusionMatrix[1, 1])
+    falsePositive = (confusionMatrix[0, 1]) / (confusionMatrix[0, 0] + confusionMatrix[0, 1])
+    falseNegative = (confusionMatrix[1, 0]) / (confusionMatrix[1, 0] + confusionMatrix[1, 1])
+    return accuracy, truePositive, trueNegative, falsePositive, falseNegative
 
 
-def getBertEmbeddings(words):
+def getBertEmbeddings(words,device):
     tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
     model = DistilBertModel.from_pretrained("distilbert-base-uncased")
+    model.to(device)
     model.eval()
 
-    xVecsDict = {word: getTokenTransformerEmbedding(word, model, tokenizer)[0][1].detach().numpy() for word in words}
-    return xVecsDict
+    wordsVecDict = {word: getTokenTransformerEmbedding(word, model, tokenizer)[0][1] for word in words}
+    return wordsVecDict
 
 
 def getSpacyEmbeddings(words):
-    xVecsDict = {word: getSpacyVector(word) for word in words}
-    return xVecsDict
-
-def runNuSVC(listOfXs, listOfYs,nuValue=0.03):
-    nusvc = NuSVC(nu=nuValue)
-    nusvc.fit(listOfXs, listOfYs)
-    nusvcPred = nusvc.predict(nplistOfXs)
-    accuracyTableNuSVC = pd.crosstab(nplistOfYs, nusvcPred).to_numpy()
-    accuracy, truePositive, trueNegative, falsePositive, falseNegative = getMetrics(accuracyTableNuSVC)
-    return accuracy, truePositive, trueNegative, falsePositive, falseNegative
-
-
-def runLinearSVC(listOfXs, listOfYs,random_state=0, tol=1e-5, max_iter=100000):
-    sckitLinear = make_pipeline(StandardScaler(), LinearSVC(random_state=random_state, tol=tol, max_iter=max_iter))
-    sckitLinear.fit(listOfXs, listOfYs)
-    coefficientsOfHyperplane = sckitLinear.named_steps.linearsvc.coef_[0]
-    predssckitLinear = sckitLinear.predict(nplistOfXs)
-    accuracyTableSckitLinear = pd.crosstab(nplistOfYs, predssckitLinear).to_numpy()
-    accuracy, truePositive, trueNegative, falsePositive, falseNegative = getMetrics(accuracyTableSckitLinear)
-    return accuracy, truePositive, trueNegative, falsePositive, falseNegative
-
-def separateWordsInSentence():
-    return 0
+    wordsVecDict = {word: getSpacyVector(word) for word in words}
+    return wordsVecDict
 
 
 
-def printMetrics(embeddingName,modelName,accuracy, truePositive, trueNegative, falsePositive, falseNegative):
+def printMetrics(embeddingName, modelName, accuracy, truePositive, trueNegative, falsePositive, falseNegative):
     print("-" * 50)
-    if(embeddingName=='transformer' and modelName == 'nuSVC'):
+    if (embeddingName == 'transformer' and modelName == 'nuSVC'):
         print("NuSVC on Transformer embeddings 768D")
-    elif(embeddingName=='transformer' and modelName == 'linearSVC'):
+    elif (embeddingName == 'transformer' and modelName == 'linearSVC'):
         print("LinearSVC on Transformer Embeddings 768D")
-    elif(embeddingName=='spacy' and modelName == 'nuSVC'):
+    elif (embeddingName == 'spacy' and modelName == 'nuSVC'):
         print("NuSVC on Spacy embeddings 300D")
     else:
         print("LinearSVC on Spacy embeddings 300D")
@@ -80,11 +57,63 @@ def printMetrics(embeddingName,modelName,accuracy, truePositive, trueNegative, f
     print("-" * 50)
 
 
+def getAvgZW(sentences, w, b, device):
+    numZ, numW, sumZ, sumW = 0, 0, 0.0, 0.0
+    sentences = " ".join(sentences)
+    for word in tqdm(sentences.split()):
+        wordVec = torch.from_numpy(getSpacyVector(word)).to(device)
+        if (wordVec @ w + b < 0):
+            numW += 1
+            sumW += wordVec
+        else:
+            numZ += 1
+            sumZ += wordVec
+    avgW = sumW / numW if numW > 0 else 0
+    avgZ = sumZ / numZ if numW > 0 else 0
+    return avgW, avgZ
+
+
+def getWordVecScore(wordVec, w, b):
+    return wordVec @ w + b
+
+
+
+def computeAugmentedWordsDict(wordsDict, w, b):
+    outDict = {}
+    for word, vec in wordsDict.items():
+        wordScore = getWordVecScore(vec, w, b)
+        outDict[word] = (vec, wordScore, wordScore >= 0)
+    return outDict
+
+
+def getSumNumWZFromWordsDict(wordsDict):
+    avgW, avgZ = 0.0, 0.0
+    numW, numZ = 0, 0
+    for word, (vec, score, inZ) in tqdm(wordsDict.items()):
+        if inZ:
+            avgZ += vec
+            numZ += 1
+        else:
+            avgW += vec
+            numW += 1
+    avgW = avgW / numW if numW != 0 else 0.0
+    avgZ = avgZ / numZ if numZ != 0 else 0.0
+    return avgW, avgZ
+
+
+def computeAvgLossFromWordsDict(posWordsDict, negWordsDict):
+    avgWPos, avgZPos = getSumNumWZFromWordsDict(posWordsDict)
+    avgWNeg, avgZNeg = getSumNumWZFromWordsDict(negWordsDict)
+    return avgWPos, avgZPos, avgWNeg, avgZNeg
+
+
 if __name__ == "__main__":
     startTime = time.time()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print("device=",device)
 
-    # filename = "datasets/combDev.csv"
-    filename = "datasets/combTrain.csv"
+    filename = "datasets/combDev.csv"
+    # filename = "datasets/combTrain.csv"
     normalizerSequence = [NFD(), StripAccents(), Strip(), Lowercase()]
     sentenceColName = 'Text'
     sep = '\t'
@@ -93,26 +122,45 @@ if __name__ == "__main__":
         getCleanedWordsFromDataset(filename, normalizerSequence, sentenceColName=sentenceColName, sep=sep)
     sortedLogRatiosOfWords, sortedAbsLogRatiosOfWords = computeLogRatios(posCleanedSentences, negCleanedSentences)
 
-    words = list(sortedLogRatiosOfWords.keys())
-    # methods = ['spacy','transformer']
-    methods = ['spacy']
-    for method in methods:
-        if method == 'transformer':
-            xVecsDict = getBertEmbeddings(words)
-        else:
-            xVecsDict = getSpacyEmbeddings(words)
+    print("finished ps and neg cleaned sentences")
+    posWords = getListOfWordsFromSentences(posCleanedSentences)
+    negWords = getListOfWordsFromSentences(negCleanedSentences)
+    allwords = posWords + negWords
+    print("got list of words")
 
-        yValsDict = {key: getClassFromLogRatio(val,threshold=0.5) for key, val in sortedAbsLogRatiosOfWords.items()}
-        # xyDict = {key: (val,xVecsDict[key]) for key, val in yValsDict.items()}
-        nplistOfXs = np.array(list(xVecsDict.values()))
-        nplistOfYs = np.array(list(yValsDict.values()))
-        # These are the true values.
+    # Get bert embeddings
+    posVecs = getBertEmbeddings(posWords,device)
+    negVecs = getBertEmbeddings(negWords,device)
+    allVecs = posVecs | negVecs
+    print("got BERT embeddings")
+    # Randomly initialize Hyperplane to 768D for size of bert embeddings
+    Hyp_w = torch.randn(768, 1, requires_grad=True, device=device)  # 300 rows and 1 columns for spacy
+    Hyp_b = torch.randn(1, requires_grad=True, device=device)
 
+    posWordsDict = computeAugmentedWordsDict(posVecs, Hyp_w, Hyp_b)
+    negWordsDict = computeAugmentedWordsDict(negVecs, Hyp_w, Hyp_b)
+    avgWPos, avgZPos, avgWNeg, avgZNeg = computeAvgLossFromWordsDict(posWordsDict, negWordsDict)
 
+    # yValsDict = {key: getClassFromLogRatio(val, threshold=0.5) for key, val in sortedAbsLogRatiosOfWords.items()}
 
+    # # True Values
+    # inputs = np.array(list(xVecsDict.values())).astype('float32')
+    # target = np.array(list(yValsDict.values())).astype('float32')
+    #
+    # inputs = torch.from_numpy(inputs)
+    # target = torch.from_numpy(target)
+    # # Make it a column vector (of unknown number of rows)
+    # target = target.reshape(-1, 1)
 
+    # avgWPos, avgZPos = getAvgZW(posCleanedSentences, Hyp_w, Hyp_b, device)
+    # avgWNeg, avgZNeg = getAvgZW(negCleanedSentences, Hyp_w, Hyp_b, device)
+    # We now compute a loss score for the hyperplane. The lower the score, the better the performance of hyperplane
+    lossScore = torch.linalg.vector_norm(avgWPos - avgWNeg, ord=2) - torch.linalg.vector_norm(avgZPos - avgZNeg, ord=2)
 
-
+    print("lossScore=", lossScore)
+    lossScore.backward()
+    print("Hyp_w.grad=",Hyp_w.grad)
+    print("Hyp_b.grad=", Hyp_b.grad)
 
 
     timeTaken = time.time() - startTime

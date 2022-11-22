@@ -32,6 +32,19 @@ def normalizeSentence(inputText, normalizerSequence):
     normalizedInput = normalizer.normalize_str(inputText)
     return normalizedInput
 
+def getListOfWordsFromSentence(sentence):
+    words = []
+    for word in sentence.split():
+        words.append(word)
+    return words
+
+
+def getListOfWordsFromSentences(sentences):
+    largeSentence = " ".join(sentences)
+    words = []
+    for word in largeSentence.split():
+        words.append(word)
+    return words
 
 
 if __name__ == "__main__":

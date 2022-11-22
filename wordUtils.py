@@ -18,9 +18,9 @@ def getSpacyVector(token):
 def getGloveVector(token):
     return nlp(token).vector
 
-def getTokenTransformerEmbedding(token,model,tokenizer):
+def getTokenTransformerEmbedding(token,model,tokenizer,device="cpu"):
     # print("token=",token)
-    encodingOfToken = tokenizer.encode(token, return_tensors='pt')
+    encodingOfToken = tokenizer.encode(token, return_tensors='pt').to(device)
     embedding = model.embeddings.word_embeddings(encodingOfToken)
     # print("model.embeddings.word_embeddings(token)=",embedding)
     return embedding

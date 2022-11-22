@@ -27,8 +27,8 @@ def getBertEmbeddings(words,device):
     model = DistilBertModel.from_pretrained("distilbert-base-uncased")
     model.to(device)
     model.eval()
-
-    wordsVecDict = {word: getTokenTransformerEmbedding(word, model, tokenizer)[0][1] for word in words}
+    wordsVecDict = {word: getTokenTransformerEmbedding(word, model, tokenizer,device)[0][1] for word in words}
+    # print("wordsVecDict[the]",wordsVecDict["the"])
     return wordsVecDict
 
 
@@ -74,7 +74,7 @@ def getAvgZW(sentences, w, b, device):
 
 
 def getWordVecScore(wordVec, w, b):
-    return wordVec @ w + b
+    return torch.matmul(wordVec, w) + b
 
 
 
@@ -155,7 +155,7 @@ if __name__ == "__main__":
     # avgWPos, avgZPos = getAvgZW(posCleanedSentences, Hyp_w, Hyp_b, device)
     # avgWNeg, avgZNeg = getAvgZW(negCleanedSentences, Hyp_w, Hyp_b, device)
     # We now compute a loss score for the hyperplane. The lower the score, the better the performance of hyperplane
-    lossScore = torch.linalg.vector_norm(avgWPos - avgWNeg, ord=2) - torch.linalg.vector_norm(avgZPos - avgZNeg, ord=2)
+    lossScore = torch.nn.functional.mse_loss(avgWPos, avgWNeg)
 
     print("lossScore=", lossScore)
     lossScore.backward()

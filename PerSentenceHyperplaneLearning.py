@@ -5,6 +5,7 @@ from wordUtils import getSpacyVector, getTokenTransformerEmbedding, getListOfWor
 from transformers import DistilBertTokenizerFast, DistilBertModel
 from tqdm import tqdm
 from collections import Counter
+from torch.utils.tensorboard import SummaryWriter
 
 
 def getClassFromLogRatio(value, threshold=0.5):
@@ -155,12 +156,11 @@ def computeLossGradients(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha):
     negValMatrix = torch.matmul(negVecMatrix, Hyp_w)
     negValMatrix = negValMatrix + torch.matmul(torch.ones(negValMatrix.shape[0], 1, device=device), Hyp_b)
 
+    numPosZ = torch.count_nonzero(torch.gt(posValMatrix, 0))
+    numPosW = torch.count_nonzero(torch.gt(-posValMatrix, 0))
 
-    numPosZ = torch.count_nonzero(torch.gt(posValMatrix,0))
-    numPosW = torch.count_nonzero(torch.gt(-posValMatrix,0))
-
-    numNegZ = torch.count_nonzero(torch.gt(negValMatrix,0))
-    numNegW = torch.count_nonzero(torch.gt(-negValMatrix,0))
+    numNegZ = torch.count_nonzero(torch.gt(negValMatrix, 0))
+    numNegW = torch.count_nonzero(torch.gt(-negValMatrix, 0))
 
     # posValSignsZVecs = torch.sigmoid(torch.mul(posValMatrix, alpha))
     # posValSignsWVecs = torch.sigmoid(torch.mul(-posValMatrix, alpha))
@@ -172,58 +172,67 @@ def computeLossGradients(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha):
     negValSigmoidsZVecs = torch.sigmoid(torch.mul(negValMatrix, alpha))
     negValSigmoidsWVecs = torch.sigmoid(torch.mul(-negValMatrix, alpha))
 
+    posAvgZVec = posValSigmoidsZVecs.T @ posVecMatrix / numPosZ
+    posAvgWVec = posValSigmoidsWVecs.T @ posVecMatrix / numPosW
 
-    posAvgZVec = posValSigmoidsZVecs.T @ posVecMatrix / sum(posValSignsZVecs)
-    posAvgWVec = posValSigmoidsWVecs.T @ posVecMatrix / sum(posValSignsWVecs)
+    negAvgZVec = negValSigmoidsZVecs.T @ negVecMatrix / numNegZ
+    negAvgWVec = negValSigmoidsWVecs.T @ negVecMatrix / numNegW
 
-    negAvgZVec = negValSigmoidsZVecs.T @ negVecMatrix / sum(negValSignsZVecs)
-    negAvgWVec = negValSigmoidsWVecs.T @ negVecMatrix / sum(negValSignsWVecs)
-
-    diffAvgZ = posAvgZVec- negAvgZVec
+    diffAvgZ = posAvgZVec - negAvgZVec
     diffAvgW = posAvgWVec - negAvgWVec
 
     # mseW = torch.nn.functional.mse_loss(posAvgWVec, negAvgWVec)
     # mseZ = torch.nn.functional.mse_loss(posAvgZVec, negAvgZVec)
-    loss = torch.square(torch.linalg.norm(diffAvgW,ord="fro")) - torch.square(torch.linalg.norm(diffAvgZ,ord="fro"))
+    loss = torch.square(torch.linalg.norm(diffAvgW, ord="fro")) - torch.square(torch.linalg.norm(diffAvgZ, ord="fro"))
 
-
-
-
-    print("torch.abs(posAvgWVec-negAvgWVec).T.shape=", (torch.abs(posAvgWVec - negAvgWVec).T).shape)
-    print("posValSignsWVecs.shape=", (posValSignsWVecs).shape)
-    print("1-posValSignsWVecs.shape=", (1 - posValSignsWVecs).shape)
-    print("posValSignsWVecs=", posValSignsWVecs)
-    print("1-posValSignsWVecs=", 1 - posValSignsWVecs)
-    print("(1/numPosW*posValSignsWVecs*(1-posValSignsWVecs)).shape=",
-          (1 / numPosW * posValSignsWVecs * (1 - posValSignsWVecs)).shape)
+    # print("torch.abs(posAvgWVec-negAvgWVec).T.shape=", (torch.abs(posAvgWVec - negAvgWVec).T).shape)
+    # print("posValSignsWVecs.shape=", (posValSignsWVecs).shape)
+    # print("1-posValSignsWVecs.shape=", (1 - posValSignsWVecs).shape)
+    # print("posValSignsWVecs=", posValSignsWVecs)
+    # print("1-posValSignsWVecs=", 1 - posValSignsWVecs)
+    # print("(1/numPosW*posValSignsWVecs*(1-posValSignsWVecs)).shape=",
+    #       (1 / numPosW * posValSignsWVecs * (1 - posValSignsWVecs)).shape)
 
     sigmoidDerivPosZ = 1 / numPosZ * torch.mul(posValSigmoidsZVecs, (1 - posValSigmoidsZVecs))
     sigmoidDerivPosW = 1 / numPosW * torch.mul(posValSigmoidsWVecs, (1 - posValSigmoidsWVecs))
     sigmoidDerivNegZ = 1 / numNegZ * torch.mul(negValSigmoidsZVecs, (1 - negValSigmoidsZVecs))
     sigmoidDerivNegW = 1 / numNegW * torch.mul(negValSigmoidsWVecs, (1 - negValSigmoidsWVecs))
-    print("sigmoidDerivPosZ.shape", sigmoidDerivPosZ.shape)
-    print("sigmoidDerivPosW.shape", sigmoidDerivPosW.shape)
-    print("sigmoidDerivPosW.T@posVecMatrix.shape", (sigmoidDerivPosW.T @ posVecMatrix).shape)
-    print("sigmoidDerivNegW.T@posVecMatrix.shape", (sigmoidDerivNegW.T @ negVecMatrix).shape)
+    # print("sigmoidDerivPosZ.shape", sigmoidDerivPosZ.shape)
+    # print("sigmoidDerivPosW.shape", sigmoidDerivPosW.shape)
+    # print("sigmoidDerivPosW.T@posVecMatrix.shape", (sigmoidDerivPosW.T @ posVecMatrix).shape)
+    # print("sigmoidDerivNegW.T@posVecMatrix.shape", (sigmoidDerivNegW.T @ negVecMatrix).shape)
 
     avgZDeriv = torch.mul(torch.abs(posAvgZVec - negAvgZVec), 2)
     avgWDeriv = torch.mul(torch.abs(posAvgWVec - negAvgWVec), 2)
-    print("avgZDeriv.shape",avgZDeriv.shape,"avgWDeriv.shape",avgWDeriv.shape)
+    # print("avgZDeriv.shape", avgZDeriv.shape, "avgWDeriv.shape", avgWDeriv.shape)
 
-    dLossbydB2 = (avgWDeriv@negVecMatrix.T)@sigmoidDerivNegW-(avgWDeriv@posVecMatrix.T)@sigmoidDerivPosW
-    dLossbydB = torch.matmul(avgWDeriv,(sigmoidDerivPosW.T @ posVecMatrix - sigmoidDerivNegW.T @ negVecMatrix).T * -1)
-    print("dLossbydB2=",dLossbydB2)
-    print("dLossbydB=", dLossbydB)
+    dLossbydB = (avgWDeriv @ negVecMatrix.T) @ sigmoidDerivNegW - (avgWDeriv @ posVecMatrix.T) @ sigmoidDerivPosW
+    # dLossbydB2 = torch.matmul(avgWDeriv, (sigmoidDerivPosW.T @ posVecMatrix - sigmoidDerivNegW.T @ negVecMatrix).T * -1)
+    # print("dLossbydB2=", dLossbydB2)
+    # print("dLossbydB=", dLossbydB)
 
-    dLossbydB = dLossbydB - \
-                torch.matmul(avgZDeriv,(sigmoidDerivPosZ.T @ posVecMatrix - sigmoidDerivNegZ.T @ negVecMatrix).T * -1)
+    dLossbydB = dLossbydB + \
+                 (avgZDeriv @ negVecMatrix.T) @ sigmoidDerivNegZ - (avgZDeriv @ posVecMatrix.T) @ sigmoidDerivPosZ
 
-    print("dLossbydB", dLossbydB)
-    dLossbydTheta = torch.matmul(torch.mul(torch.abs(posAvgWVec - negAvgWVec), 2),
-                             (sigmoidDerivPosW.T @ posVecMatrix - sigmoidDerivNegW.T @ negVecMatrix).T * -1)
+    # dLossbydB2 = dLossbydB - \
+    #             torch.matmul(avgZDeriv, (sigmoidDerivPosZ.T @ posVecMatrix - sigmoidDerivNegZ.T @ negVecMatrix).T)
 
+    # print("dLossbydB2=", dLossbydB2)
+    # print("dLossbydB=", dLossbydB)
+    #
+    # print("avgWDeriv @ negVecMatrix", (negVecMatrix @ avgWDeriv.T).shape)
+    # print("sigmoidDerivNegW.shape", sigmoidDerivNegW.shape)
+    # print("torch.mul(avgWDeriv @ negVecMatrix, sigmoidDerivNegW).shape",
+    #       torch.mul(negVecMatrix @ avgWDeriv.T, sigmoidDerivNegW).shape)
 
-    return loss,dLossbydB
+    dLossbydTheta = negVecMatrix.T @ torch.mul(negVecMatrix @ avgWDeriv.T, sigmoidDerivNegW) - \
+                    posVecMatrix.T @ torch.mul((posVecMatrix @ avgWDeriv.T), sigmoidDerivPosW)
+    dLossbydTheta = dLossbydTheta + \
+                    negVecMatrix.T @ torch.mul(negVecMatrix @ avgZDeriv.T,sigmoidDerivNegZ) - \
+                    posVecMatrix.T @ torch.mul((posVecMatrix @ avgZDeriv.T), sigmoidDerivPosZ)
+
+    # print("dLossbydTheta=", dLossbydTheta, "\ndLossbydTheta.shape", dLossbydTheta.shape)
+    return loss, dLossbydTheta, dLossbydB
     # rmseW * (1 / numPosW * (posValSignsWVecs.T@) - 1 / numNegW * (1)) - 2 * rmseZ * (1 / numPosZ * (1) - 1 / numNegZ * (1))
 
 
@@ -233,9 +242,10 @@ if __name__ == "__main__":
     torch.manual_seed(8)
     random.seed(8)
     print("device=", device)
+    writer = SummaryWriter(log_dir='outputs/tensorBoardLogs/')
 
-    filename = "datasets/combDev.csv"
-    # filename = "datasets/combTrain.csv"
+    # filename = "datasets/combDev.csv"
+    filename = "datasets/combTrain.csv"
     normalizerSequence = [NFD(), StripAccents(), Strip(), Lowercase()]
     sentenceColName = 'Text'
     sep = '\t'
@@ -278,24 +288,37 @@ if __name__ == "__main__":
 
     negVecTuples = tuple(negVecs.values())
     negVecMatrix = torch.stack(negVecTuples, 0)
-    print("posVecMatrix.shape", posVecMatrix.shape)
-    print("negVecMatrix.shape", negVecMatrix.shape)
+    # print("posVecMatrix.shape", posVecMatrix.shape)
+    # print("negVecMatrix.shape", negVecMatrix.shape)
 
     timeTaken = time.time() - startTime
     print("Time Taken for preliminaries:", timeTaken)
     # alpha = torch.tensor([4], device=device)
     alpha = 4
-    numIters = 1
-    for i in tqdm(range(numIters)):
-        timeLoopStart = time.time()
-        posAvgZVec, posAvgWVec, negAvgZVec, negAvgWVec, posValMatrix, negValMatrix, \
-        posValSignsZVecs, posValSignsWVecs, negValSignsZVecs, negValSignsWVecs = \
-            getAvgWZVecsForPosNeg(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha)
+    numIters = 10000
+    stepSize = 0.01
 
-        loss = torch.nn.functional.mse_loss(posAvgWVec, negAvgWVec) - \
-               torch.nn.functional.mse_loss(posAvgZVec, negAvgZVec)
-        print("\nloss=", loss)
-        computeLossGradients(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha)
+    for iter in tqdm(range(numIters)):
+        # timeLoopStart = time.time()
+
+        loss, dLossbydTheta, dLossbydB = computeLossGradients(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha)
+        if(iter%100==0):
+            writer.add_scalar("Loss/train", loss, iter)
+            # print("loss=",loss)
+
+        Hyp_w = Hyp_w - dLossbydTheta * stepSize
+        Hyp_b = Hyp_b - dLossbydB * stepSize
+        torch.cuda.empty_cache()
+        # print("time for current loop:", time.time() - timeLoopStart)
+
+
+        # posAvgZVec, posAvgWVec, negAvgZVec, negAvgWVec, posValMatrix, negValMatrix, \
+        # posValSignsZVecs, posValSignsWVecs, negValSignsZVecs, negValSignsWVecs = \
+        #     getAvgWZVecsForPosNeg(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha)
+        #
+        # loss = torch.nn.functional.mse_loss(posAvgWVec, negAvgWVec) - \
+        #        torch.nn.functional.mse_loss(posAvgZVec, negAvgZVec)
+        # computeLossGradients(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha)
         # Autogradient taking too long. So we will use manual gradient.
         # loss.backward(retain_graph=True)
         # stepSize = 1
@@ -305,6 +328,6 @@ if __name__ == "__main__":
         #     Hyp_b -= Hyp_b.grad * stepSize
         #     Hyp_w.grad.zero_()
         #     Hyp_b.grad.zero_()
-        print("time for current loop:", time.time() - timeLoopStart)
 
+    writer.close()
     print("Total Time taken for %d loops: %f" % (numIters, time.time() - startTime))

@@ -1,4 +1,4 @@
-import time, numpy as np, pandas as pd, torch, random
+import time, numpy as np, torch, random,datetime
 from wordSentimentStatsInDataset import getCleanedWordsFromDataset, computeLogRatios
 from tokenizers.normalizers import NFD, StripAccents, Strip, Lowercase, BertNormalizer
 from wordUtils import getSpacyVector, getTokenTransformerEmbedding, getListOfWordsFromSentences
@@ -242,10 +242,15 @@ if __name__ == "__main__":
     torch.manual_seed(8)
     random.seed(8)
     print("device=", device)
-    writer = SummaryWriter(log_dir='outputs/tensorBoardLogs/')
+    filename = "datasets/combDev.csv"
+    # filename = "datasets/combTrain.csv"
+    datetimeStr = 'tensorBoardLogs/Dev_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '/'
+    # datetimeStr = 'tensorBoardLogs/Train_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '/'
 
-    # filename = "datasets/combDev.csv"
-    filename = "datasets/combTrain.csv"
+    writer = SummaryWriter(log_dir=datetimeStr)
+
+
+
     normalizerSequence = [NFD(), StripAccents(), Strip(), Lowercase()]
     sentenceColName = 'Text'
     sep = '\t'
@@ -269,8 +274,10 @@ if __name__ == "__main__":
     print("Time Taken breakpoint 1:", timeTaken)
 
     # Randomly initialize Hyperplane to 768D for size of bert embeddings
-    Hyp_w = torch.randn(768, 1, requires_grad=True, device=device)  # 768 rows and 1 columns for spacy
-    Hyp_b = torch.randn(1, 1, requires_grad=True, device=device)
+    # Hyp_w = torch.randn(768, 1, requires_grad=True, device=device)  # 768 rows and 1 columns for spacy
+    # Hyp_b = torch.randn(1, 1, requires_grad=True, device=device)
+    Hyp_w = torch.randn(768, 1, device=device)  # 768 rows and 1 columns for spacy
+    Hyp_b = torch.randn(1, 1, device=device)
 
     posWordsCount = Counter(posWords)
     negWordsCount = Counter(negWords)
@@ -295,19 +302,21 @@ if __name__ == "__main__":
     print("Time Taken for preliminaries:", timeTaken)
     # alpha = torch.tensor([4], device=device)
     alpha = 4
-    numIters = 10000
+    # numIters = 100000
+    numIters = 20000
     stepSize = 0.01
 
     for iter in tqdm(range(numIters)):
         # timeLoopStart = time.time()
+        with torch.no_grad():
+            loss, dLossbydTheta, dLossbydB = computeLossGradients(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha)
+            if(iter%500==0):
+                writer.add_scalar("Loss/train", loss, iter)
+                # print("loss=",loss)
 
-        loss, dLossbydTheta, dLossbydB = computeLossGradients(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha)
-        if(iter%100==0):
-            writer.add_scalar("Loss/train", loss, iter)
-            # print("loss=",loss)
-
-        Hyp_w = Hyp_w - dLossbydTheta * stepSize
-        Hyp_b = Hyp_b - dLossbydB * stepSize
+            Hyp_w = Hyp_w - dLossbydTheta * stepSize
+            Hyp_b = Hyp_b - dLossbydB * stepSize
+        del loss, dLossbydTheta, dLossbydB
         torch.cuda.empty_cache()
         # print("time for current loop:", time.time() - timeLoopStart)
 

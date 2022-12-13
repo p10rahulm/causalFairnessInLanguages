@@ -150,6 +150,34 @@ def getAvgWZVecsForPosNeg(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha):
 
 
 def computeLossGradients(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha):
+    # Sizes:
+    # Hyp_w = dim * 1
+    # Hyp_w = 1 * 1
+    # posVecMatrix = sizePos * dim
+    # negVecMatrix = sizeNeg * dim
+    # alpha = scalar
+    # posValMatrix = sizePos * 1
+    # negValMatrix = sizePos * 1
+    # posValSigmoidsZVecs = sizePos * 1
+    # posValSigmoidsWVecs = sizePos * 1
+    # negValSigmoidsZVecs = sizePos * 1
+    # negValSigmoidsWVecs = sizePos * 1
+    # posAvgZVec = 1 * dim
+    # posAvgWVec = 1 * dim
+    # negAvgZVec = 1 * dim
+    # negAvgWVec = 1 * dim
+    # diffAvgZ = 1 * dim
+    # diffAvgW = 1 * dim
+    # loss = scalar
+
+    # sigmoidDerivPosZ = sizePos * 1
+    # sigmoidDerivPosW = sizePos * 1
+    # sigmoidDerivNegZ = sizeNeg * 1
+    # sigmoidDerivNegW = sizeNeg * 1
+    # avgZDeriv = 1 * dim
+    # avgWDeriv = 1 * dim
+
+
     posValMatrix = torch.matmul(posVecMatrix, Hyp_w)
     posValMatrix = posValMatrix + torch.matmul(torch.ones(posValMatrix.shape[0], 1, device=device), Hyp_b)
 
@@ -172,11 +200,11 @@ def computeLossGradients(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha):
     negValSigmoidsZVecs = torch.sigmoid(torch.mul(negValMatrix, alpha))
     negValSigmoidsWVecs = torch.sigmoid(torch.mul(-negValMatrix, alpha))
 
-    posAvgZVec = posValSigmoidsZVecs.T @ posVecMatrix / numPosZ
-    posAvgWVec = posValSigmoidsWVecs.T @ posVecMatrix / numPosW
+    posAvgZVec = posVecMatrix.T @ posValSigmoidsZVecs  / numPosZ
+    posAvgWVec = posVecMatrix.T @ posValSigmoidsWVecs  / numPosW
 
-    negAvgZVec = negValSigmoidsZVecs.T @ negVecMatrix / numNegZ
-    negAvgWVec = negValSigmoidsWVecs.T @ negVecMatrix / numNegW
+    negAvgZVec = negVecMatrix.T @ negValSigmoidsZVecs  / numNegZ
+    negAvgWVec = negVecMatrix.T @ negValSigmoidsWVecs / numNegW
 
     diffAvgZ = posAvgZVec - negAvgZVec
     diffAvgW = posAvgWVec - negAvgWVec
@@ -193,17 +221,17 @@ def computeLossGradients(Hyp_w, Hyp_b, posVecMatrix, negVecMatrix, alpha):
     # print("(1/numPosW*posValSignsWVecs*(1-posValSignsWVecs)).shape=",
     #       (1 / numPosW * posValSignsWVecs * (1 - posValSignsWVecs)).shape)
 
-    sigmoidDerivPosZ = 1 / numPosZ * torch.mul(posValSigmoidsZVecs, (1 - posValSigmoidsZVecs))
-    sigmoidDerivPosW = 1 / numPosW * torch.mul(posValSigmoidsWVecs, (1 - posValSigmoidsWVecs))
-    sigmoidDerivNegZ = 1 / numNegZ * torch.mul(negValSigmoidsZVecs, (1 - negValSigmoidsZVecs))
-    sigmoidDerivNegW = 1 / numNegW * torch.mul(negValSigmoidsWVecs, (1 - negValSigmoidsWVecs))
+    sigmoidDerivPosZ = alpha / numPosZ * torch.mul(posValSigmoidsZVecs, (1 - posValSigmoidsZVecs))
+    sigmoidDerivPosW = alpha / numPosW * torch.mul(posValSigmoidsWVecs, (1 - posValSigmoidsWVecs))
+    sigmoidDerivNegZ = alpha / numNegZ * torch.mul(negValSigmoidsZVecs, (1 - negValSigmoidsZVecs))
+    sigmoidDerivNegW = alpha / numNegW * torch.mul(negValSigmoidsWVecs, (1 - negValSigmoidsWVecs))
     # print("sigmoidDerivPosZ.shape", sigmoidDerivPosZ.shape)
     # print("sigmoidDerivPosW.shape", sigmoidDerivPosW.shape)
     # print("sigmoidDerivPosW.T@posVecMatrix.shape", (sigmoidDerivPosW.T @ posVecMatrix).shape)
     # print("sigmoidDerivNegW.T@posVecMatrix.shape", (sigmoidDerivNegW.T @ negVecMatrix).shape)
 
-    avgZDeriv = torch.mul(torch.abs(posAvgZVec - negAvgZVec), 2)
-    avgWDeriv = torch.mul(torch.abs(posAvgWVec - negAvgWVec), 2)
+    avgZDeriv = torch.mul(torch.abs(diffAvgZ), 2)
+    avgWDeriv = torch.mul(torch.abs(diffAvgW), 2)
     # print("avgZDeriv.shape", avgZDeriv.shape, "avgWDeriv.shape", avgWDeriv.shape)
 
     dLossbydB = (avgWDeriv @ negVecMatrix.T) @ sigmoidDerivNegW - (avgWDeriv @ posVecMatrix.T) @ sigmoidDerivPosW
@@ -242,10 +270,10 @@ if __name__ == "__main__":
     torch.manual_seed(8)
     random.seed(8)
     print("device=", device)
-    filename = "datasets/combDev.csv"
-    # filename = "datasets/combTrain.csv"
-    datetimeStr = 'tensorBoardLogs/Dev_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '/'
-    # datetimeStr = 'tensorBoardLogs/Train_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '/'
+    # filename = "datasets/combDev.csv"
+    # datetimeStr = 'tensorBoardLogs/Dev_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '/'
+    filename = "datasets/combTrain.csv"
+    datetimeStr = 'tensorBoardLogs/Train_' + datetime.datetime.now().strftime("%Y%m%d_%H%M%S") + '/'
 
     writer = SummaryWriter(log_dir=datetimeStr)
 

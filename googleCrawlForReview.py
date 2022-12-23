@@ -38,8 +38,8 @@ if __name__=="__main__":
     trainingData['imdbReviewLinks'] = ""
     reviews = trainingData['Text'].to_list()
     # print("reviews=", reviews)
-    user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-    headers = {'User-Agent': user_agent}
+    # user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+    # headers = {'User-Agent': user_agent}
 
     for reviewNum in range(len(reviews)):
         review = reviews[reviewNum]

@@ -32,14 +32,12 @@ if __name__ == "__main__":
     trainingData['imdbMovieLink'] = ""
     reviewLinks = trainingData['imdbReviewLinks'].to_list()
     # print("reviews=", reviews)
-    user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
-    headers = {'User-Agent': user_agent}
+    # user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/108.0.0.0 Safari/537.36'
+    # headers = {'User-Agent': user_agent}
 
     for reviewNum in range(len(reviewLinks)):
-        reviewURL = reviewLinks[reviewNum]
-        if reviewURL == '':
-            pass
-        else:
+        reviewURL = str(reviewLinks[reviewNum])
+        if ('http' in reviewURL):
             query = reviewURL
             # query = 'site:imdb.com ' + review
             print("query=", query)
@@ -53,6 +51,8 @@ if __name__ == "__main__":
             trainingData.loc[reviewNum, 'imdbMovieLink'] = movieLink
             print("trainingData.loc[reviewNum, 'imdbMovieLink']=", trainingData.loc[reviewNum, 'imdbMovieLink'])
             time.sleep(1)
+
+
 
     print(trainingData)
     trainingData.to_csv('outputs/trainingDataWithMovieLinks.csv', sep='|')
